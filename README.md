@@ -1,1 +1,1 @@
-# GPS coordinate logger written for used with micropython.
+# GPS coordinate logger written for use with micropython.

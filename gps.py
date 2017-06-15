@@ -160,8 +160,7 @@ class Gps:
         print('Cmd -> {}'.format(dictionary.get('Cmd')))
         if dictionary.get('Cmd') == 'GPGGA':
             self._usedSats = int(dictionary.get('NumberOfSatInUse'))
-
-        if dictionary.get('Cmd') == 'GPRMC':
+        elif dictionary.get('Cmd') == 'GPRMC':
 
             print('CurrLatitude -> {}'.format(dictionary.get('CurrLatitude')))
             print('CurrLongitude -> {}'.format(dictionary.get('CurrLongitude')))
@@ -173,18 +172,11 @@ class Gps:
                 self._time = dictionary.get('TimeStamp')
                 self._date = dictionary.get('DateStamp')
 
-                lat_deg = (latitude // 100)
-                long_deg = (longitude // 100)
-
-                a = (((latitude * 1000000.0) % 100000000) / 60.0) % 1000000
-                b = (((longitude * 1000000.0) % 100000000) / 60.0) % 1000000
-
-                c = a / 1000000.0 + lat_deg
-                d = b / 1000000.0 + long_deg
+                c, d = self.dm2dd(latitude, longitude)
 
                 print('lat -> {:.6f}'.format(c))
                 print('long -> {:.6f}'.format(d))
-                print('Used Satelites -> {}'.format(self._usedSats))
+                print('Used Satellites -> {}'.format(self._usedSats))
                 if self._usedSats >= 5:
                     if (not ((self._latitude + 0.0002) > c and (self._latitude - 0.0002) < c) or
                             not ((self._longitude + 0.0002) > d and (self._longitude - 0.0002) < d)):
@@ -201,30 +193,28 @@ class Gps:
                         dict['Date'] = self._date
                         dict['Time'] = self._time
 
-                        return dict
+                        pyb.LED(1).toggle()
 
-                        # try:
-                        #     f = open(self._date + '_log.csv', 'r+')
-                        # except OSError:
-                        #     f = open(self._date + '_log.csv', 'w+')
-                        #     f.write('Latitude,Longitude,Date,Time\n')
-                        #
-                        # f.seek(0, 2)
-                        # pyb.LED(1).toggle()
-                        # f.write(str(self._latitude) + ',' +
-                        #         str(self._longitude) + ',' +
-                        #         self._date + ',' +
-                        #         self._time + '\n')
-                        # f.close()
+                        return dict
 
         return None
 
 
-# b'$GPRMC,083139.00,V,,,,,,,260517,,,N*7A\r\n'
-# b'$GPVTG,,,,,,,,,N*30\r\n'
-# b'$GPGGA,083139.00,,,,,0,00,99.99,,,,,,*66\r\n'
-# b'$GPGSA,A,1,,,,,,,,,,,,,99.99,99.99,99.99*30\r\n'
-# b'$GPGSV,3,1,12,01,04,040,,10,05,324,,12,27,245,,13,53,178,*77\r\n'
-# b'$GPGSV,3,2,12,15,58,254,,17,52,085,,18,09,300,,19,52,128,*7A\r\n'
-# b'$GPGSV,3,3,12,20,03,234,,24,41,302,,28,25,054,,30,09,105,*7E\r\n'
-# b'$GPGLL,,,,,083139.00,V,N*4A\r\n'
+    def dm2dd(self, latitude, longitude):
+        """ Convert degrees minute to decimal degrees GPS coordinate. """
+        lat_deg = (latitude // 100)
+        long_deg = (longitude // 100)
+        a = (((latitude * 1000000.0) % 100000000) / 60.0) % 1000000
+        b = (((longitude * 1000000.0) % 100000000) / 60.0) % 1000000
+        c = a / 1000000.0 + lat_deg
+        d = b / 1000000.0 + long_deg
+        return c, d
+
+        # b'$GPRMC,083139.00,V,,,,,,,260517,,,N*7A\r\n'
+        # b'$GPVTG,,,,,,,,,N*30\r\n'
+        # b'$GPGGA,083139.00,,,,,0,00,99.99,,,,,,*66\r\n'
+        # b'$GPGSA,A,1,,,,,,,,,,,,,99.99,99.99,99.99*30\r\n'
+        # b'$GPGSV,3,1,12,01,04,040,,10,05,324,,12,27,245,,13,53,178,*77\r\n'
+        # b'$GPGSV,3,2,12,15,58,254,,17,52,085,,18,09,300,,19,52,128,*7A\r\n'
+        # b'$GPGSV,3,3,12,20,03,234,,24,41,302,,28,25,054,,30,09,105,*7E\r\n'
+        # b'$GPGLL,,,,,083139.00,V,N*4A\r\n'

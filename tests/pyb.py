@@ -144,12 +144,12 @@ def unique_id():
     pass
 
 
-def usb_mode(modestr, vid=0xf055, pid=0x9801, hid=pyb.hid_mouse):
-    """
-    If called with no arguments, return the current USB mode as a string.
-    If called with modestr provided, attempts to set USB mode.
-    """
-    pass
+# def usb_mode(modestr, vid=0xf055, pid=0x9801, hid=pyb.hid_mouse):
+#     """
+#     If called with no arguments, return the current USB mode as a string.
+#     If called with modestr provided, attempts to set USB mode.
+#     """
+#     pass
 
 
 class Accel:
@@ -572,7 +572,7 @@ class Pin:
         C12 = "C12"
         C13 = "C13"
 
-    def __init__(self, id, mode=IN, af):
+    def __init__(self, id, mode=IN):
         """
         Create a new Pin object associated with the id.
         """

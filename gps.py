@@ -1,6 +1,12 @@
-import pyb
-import ure
-import time
+try:
+    import pyb
+except ImportError:
+    import tests.pyb as pyb
+
+try:
+    import ure
+except ImportError:
+    import re as ure
 
 
 class Gps:
@@ -12,6 +18,7 @@ class Gps:
         self._latitude = 0.0
         self._time = ''
         self._date = ''
+        self._usedSats = 0
         self._d = {
             'GPRMC':
                     ['Cmd',
@@ -109,9 +116,10 @@ class Gps:
         }
         self._cmd = None
         self._regx = [
-            '^\$(GPRMC)' + ',([^,]*)' * 12 + '\r\n',
+            #'^\$(GPRMC)' + ',([^,]*)' * 12 + '\r\n',
+            '^\$(GPRMC),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),(\w*)\*([0-9A-F]{2})',
             '^\$(GPVTG)' + ',([^,]*)' * 9 + '\r\n',
-            # '^\$(GPGGA)' + ',([^,]*)' * 15 + '\r\n',
+            '^\$(GPGGA),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*)\*([0-9A-F]{2})\r\n',
             # '^\$(GPGSA)' + ',([^,]*)' * 16 + '\r\n',
             # '^\$(GPGSV)' + ',([^,]*)' * 20 + '\r\n',
             '^\$(GPGLL)' + ',([^,]*)' * 7 + '\r\n',
@@ -121,16 +129,16 @@ class Gps:
         self._regxc = [ure.compile(s) for s in self._regx]
         self._uart1.init(9600, read_buf_len=1024)
 
-    def start(self):
-        #self._uart1.init(9600, read_buf_len=1024)
-
-        #while True:
+    def readData(self):
         self.buff = self._uart1.readline()
-        if self.buff is None:
-            #continue
-            return
+        return self.buff
 
-        buf_dec = self.buff.decode()
+    def parse(self, buff:bytearray):
+
+        if buff is None:
+            return None
+
+        buf_dec = buff.decode()
 
         # print(buf_dec)
         dictionary = {}
@@ -149,11 +157,16 @@ class Gps:
 
             break
 
-        if dictionary.get('Cmd') is 'GPRMC':
-            # print('CurrLatitude -> {}'.format(dictionary.get('CurrLatitude')))
-            # print('CurrLongitude -> {}'.format(dictionary.get('CurrLongitude')))
-            if (dictionary.get('CurrLatitude') is not '' and dictionary.get('CurrLongitude') is not '' and
-                dictionary.get('DateStamp') is not '' and dictionary.get('TimeStamp') is not ''):
+        print('Cmd -> {}'.format(dictionary.get('Cmd')))
+        if dictionary.get('Cmd') == 'GPGGA':
+            self._usedSats = int(dictionary.get('NumberOfSatInUse'))
+
+        if dictionary.get('Cmd') == 'GPRMC':
+
+            print('CurrLatitude -> {}'.format(dictionary.get('CurrLatitude')))
+            print('CurrLongitude -> {}'.format(dictionary.get('CurrLongitude')))
+            if (dictionary.get('CurrLatitude') != '' and dictionary.get('CurrLongitude') != '' and
+                dictionary.get('DateStamp') != '' and dictionary.get('TimeStamp') != ''):
 
                 latitude = float(dictionary.get('CurrLatitude'))
                 longitude = float(dictionary.get('CurrLongitude'))
@@ -169,34 +182,42 @@ class Gps:
                 c = a / 1000000.0 + lat_deg
                 d = b / 1000000.0 + long_deg
 
-                # print('lat -> {:.6f}'.format(c))
-                # print('long -> {:.6f}'.format(d))
+                print('lat -> {:.6f}'.format(c))
+                print('long -> {:.6f}'.format(d))
+                print('Used Satelites -> {}'.format(self._usedSats))
+                if self._usedSats >= 5:
+                    if (not ((self._latitude + 0.0002) > c and (self._latitude - 0.0002) < c) or
+                            not ((self._longitude + 0.0002) > d and (self._longitude - 0.0002) < d)):
 
-                if (not ((self._latitude + 0.0002) > c and (self._latitude - 0.0002) < c) or
-                        not ((self._longitude + 0.0002) > d and (self._longitude - 0.0002) < d)):
+                        self._latitude = c
+                        self._longitude = d
+                        # print('Time -> {}'.format(self._time))
+                        print('Latitude -> {:.6f}'.format(self._latitude))
+                        print('Longitude -> {:.6f}'.format(self._longitude))
 
-                    self._latitude = c
-                    self._longitude = d
-                    # print('Time -> {}'.format(self._time))
-                    #print('Latitude -> {:.6f}'.format(self._latitude))
-                    #print('Longitude -> {:.6f}'.format(self._longitude))
+                        dict = {}
+                        dict['Latitude'] = str(self._latitude)
+                        dict['Longitude'] = str(self._longitude)
+                        dict['Date'] = self._date
+                        dict['Time'] = self._time
 
-                    try:
-                        f = open(self._date + '_log.csv', 'r+')
-                    except OSError:
-                        f = open(self._date + '_log.csv', 'w+')
-                        f.write('Latitude,Longitude,Date,Time\n')
+                        return dict
 
-                    f.seek(0, 2)
-                    pyb.LED(1).toggle()
-                    f.write(str(self._latitude) + ',' +
-                            str(self._longitude) + ',' +
-                            self._date + ',' +
-                            self._time + '\n')
-                    f.close()
+                        # try:
+                        #     f = open(self._date + '_log.csv', 'r+')
+                        # except OSError:
+                        #     f = open(self._date + '_log.csv', 'w+')
+                        #     f.write('Latitude,Longitude,Date,Time\n')
+                        #
+                        # f.seek(0, 2)
+                        # pyb.LED(1).toggle()
+                        # f.write(str(self._latitude) + ',' +
+                        #         str(self._longitude) + ',' +
+                        #         self._date + ',' +
+                        #         self._time + '\n')
+                        # f.close()
 
-        return
-            #time.sleep(1)
+        return None
 
 
 # b'$GPRMC,083139.00,V,,,,,,,260517,,,N*7A\r\n'

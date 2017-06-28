@@ -13,12 +13,13 @@ class Gps:
 
     def __init__(self):
         self._uart1 = pyb.UART(1)
-        self.buff = bytearray(500)
+        #self.buff = bytearray(500)
         self._longitude = 0.0
         self._latitude = 0.0
-        self._time = ''
+        self._time = 0
         self._date = ''
         self._usedSats = 0
+        self._dataQuality = 0
         self._d = {
             'GPRMC':
                     ['Cmd',
@@ -32,11 +33,12 @@ class Gps:
                     'TrueCourse',
                     'DateStamp',
                     'Variation',
+                    'dummy',
                     'VarDir',
                     'Checksum'],
             'GPVTG':
                     ['Cmd',
-                     'TrackDegTrue',
+                    'TrackDegTrue',
                     'FixedTextT',
                     'TrackDegMag',
                     'FixedTextM',
@@ -47,7 +49,7 @@ class Gps:
                     'Checksum'],
             'GPGGA':
                     ['Cmd',
-                     'UTCOfPosition',
+                    'UTCOfPosition',
                     'Latitude',
                     'LatDir',
                     'Longitude',
@@ -64,7 +66,7 @@ class Gps:
                     'Checksum'],
             'GPGSA':
                     ['Cmd',
-                     'Mode1',
+                    'Mode1',
                     'Mode2',
                     'ID1',
                     'ID2',
@@ -84,7 +86,7 @@ class Gps:
                     'Checksum'],
             'GPGSV':
                     ['Cmd',
-                     'TotalMEssages',
+                    'TotalMEssages',
                     'MessageNumber',
                     'TotalSVsInView',
                     'SVNumber1',
@@ -106,7 +108,7 @@ class Gps:
                     'Checksum'],
             'GPGLL':
                     ['Cmd',
-                     'CurrLatitude',
+                    'CurrLatitude',
                     'LatDir',
                     'CurrLongitude',
                     'LongDir',
@@ -117,30 +119,27 @@ class Gps:
         self._cmd = None
         self._regx = [
             #'^\$(GPRMC)' + ',([^,]*)' * 12 + '\r\n',
-            '^\$(GPRMC),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),(\w*)\*([0-9A-F]{2})',
-            '^\$(GPVTG)' + ',([^,]*)' * 9 + '\r\n',
-            '^\$(GPGGA),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*)\*([0-9A-F]{2})\r\n',
+            '^\$(GPRMC),([0-9][0-9][0-9][0-9][0-9][0-9]).[0-9][0-9],([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),(\w?)\*([0-9A-F][0-9A-F])',
+            '^\$(GPGGA),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([0-9]*)\*([0-9A-F][0-9A-F])',
+            #'^\$(GPVTG)' + ',([^,]*)' * 9 + '\r\n',
+            #'^\$(GPGGA),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*)',
             # '^\$(GPGSA)' + ',([^,]*)' * 16 + '\r\n',
             # '^\$(GPGSV)' + ',([^,]*)' * 20 + '\r\n',
-            '^\$(GPGLL)' + ',([^,]*)' * 7 + '\r\n',
+            #'^\$(GPGLL)' + ',([^,]*)' * 7 + '\r\n',
             #^\$(GPRMC),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),(\w*)\*([0-9A-F]{2})$
         ]
 
         self._regxc = [ure.compile(s) for s in self._regx]
-        self._uart1.init(9600, read_buf_len=1024)
+        self._uart1.init(9600, read_buf_len=4096)
 
     def readData(self):
-        self.buff = self._uart1.readline()
-        return self.buff
+        return self._uart1.readline()
 
     def parse(self, buff:bytearray):
+        #print(buff)
+        buf_dec = buff.decode('utf-8')
 
-        if buff is None:
-            return None
-
-        buf_dec = buff.decode()
-
-        # print(buf_dec)
+        #print(buf_dec)
         dictionary = {}
         for r in self._regxc:
             m = r.match(buf_dec)
@@ -152,60 +151,77 @@ class Gps:
             # print('cmd -> {}'.format(self._cmd))
             i = 1
             for name in self._d[self._cmd]:
-                dictionary[name] = m.group(i)
-                i += 1
+                 #print('{} -> {}'.format(name, m.group(i)))
+                 dictionary[name] = m.group(i)
+                 i += 1
 
             break
+        else:
+            return None
 
-        print('Cmd -> {}'.format(dictionary.get('Cmd')))
+        #print('Dict -> {}'.format(dictionary))
+        #print('Cmd -> {}'.format(dictionary.get('Cmd')))
         if dictionary.get('Cmd') == 'GPGGA':
-            self._usedSats = int(dictionary.get('NumberOfSatInUse'))
+            if (dictionary.get('NumberOfSatInUse') != '' and dictionary.get('NumberOfSatInUse') is not None and
+                dictionary.get('GPSQualityIndicator') != '' and dictionary.get('GPSQualityIndicator') is not None):
+                self._usedSats = int(dictionary.get('NumberOfSatInUse'))
+                self._dataQuality = int(dictionary.get('GPSQualityIndicator'))
+                print('Used Satellites -> {:d}'.format(self._usedSats))
+                print('Quality -> {:d}'.format(self._dataQuality))
         elif dictionary.get('Cmd') == 'GPRMC':
+            print('CurrLatitude -> {:s}'.format(dictionary.get('CurrLatitude')))
+            print('CurrLongitude -> {:s}'.format(dictionary.get('CurrLongitude')))
 
-            print('CurrLatitude -> {}'.format(dictionary.get('CurrLatitude')))
-            print('CurrLongitude -> {}'.format(dictionary.get('CurrLongitude')))
             if (dictionary.get('CurrLatitude') != '' and dictionary.get('CurrLongitude') != '' and
                 dictionary.get('DateStamp') != '' and dictionary.get('TimeStamp') != ''):
 
                 latitude = float(dictionary.get('CurrLatitude'))
                 longitude = float(dictionary.get('CurrLongitude'))
-                self._time = dictionary.get('TimeStamp')
+                self._time = int(dictionary.get('TimeStamp'))
+                self._time += 30000; # +3 hours forward for summer time.
                 self._date = dictionary.get('DateStamp')
 
                 c, d = self.dm2dd(latitude, longitude)
 
-                print('lat -> {:.6f}'.format(c))
-                print('long -> {:.6f}'.format(d))
-                print('Used Satellites -> {}'.format(self._usedSats))
-                if self._usedSats >= 5:
-                    if (not ((self._latitude + 0.0002) > c and (self._latitude - 0.0002) < c) or
-                            not ((self._longitude + 0.0002) > d and (self._longitude - 0.0002) < d)):
+                # print('lat -> {:.6f}'.format(c))
+                # print('long -> {:.6f}'.format(d))
 
-                        self._latitude = c
-                        self._longitude = d
-                        # print('Time -> {}'.format(self._time))
-                        print('Latitude -> {:.6f}'.format(self._latitude))
-                        print('Longitude -> {:.6f}'.format(self._longitude))
+                if (not ((self._latitude + 0.0002) > c and (self._latitude - 0.0002) < c) or
+                        not ((self._longitude + 0.0002) > d and (self._longitude - 0.0002) < d)):
+                    if self._dataQuality > 0:
+                        if self._usedSats >= 5:
+                            self._latitude = c
+                            self._longitude = d
+                            # print('Time -> {}'.format(self._time))
+                            # print('Latitude -> {:.6f}'.format(self._latitude))
+                            # print('Longitude -> {:.6f}'.format(self._longitude))
 
-                        dict = {}
-                        dict['Latitude'] = str(self._latitude)
-                        dict['Longitude'] = str(self._longitude)
-                        dict['Date'] = self._date
-                        dict['Time'] = self._time
+                            dict = {}
+                            dict['Latitude'] = str(self._latitude)
+                            dict['Longitude'] = str(self._longitude)
+                            dict['Date'] = '{0}{1}.{2}{3}.{4}{5}'.format(*self._date)
+                            dict['Time'] = '{0}{1}:{2}{3}:{4}{5}'.format(*str(self._time))
+                            dict['Satellites'] = str(self._usedSats)
+                            dict['Quality'] = str(self._dataQuality)
 
-                        pyb.LED(1).toggle()
+                            pyb.LED(1).toggle()
 
-                        return dict
+                            return dict
+        else:
+            return None
+
 
         return None
 
 
-    def dm2dd(self, latitude, longitude):
+    def dm2dd(self, latitude:float, longitude:float):
         """ Convert degrees minute to decimal degrees GPS coordinate. """
+
         lat_deg = (latitude // 100)
         long_deg = (longitude // 100)
         a = (((latitude * 1000000.0) % 100000000) / 60.0) % 1000000
         b = (((longitude * 1000000.0) % 100000000) / 60.0) % 1000000
         c = a / 1000000.0 + lat_deg
         d = b / 1000000.0 + long_deg
+
         return c, d
